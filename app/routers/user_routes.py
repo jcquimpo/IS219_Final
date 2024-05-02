@@ -267,7 +267,9 @@ async def search_users(
 ):
     total_users = await UserService.count(db)
 
-    users = await UserService.search_users(db, username=username, email=email, role=role, account_status=account_status, registration_date_from=registration_date_from, registration_date_to=registration_date_to, skip=skip, limit=limit)
+    users = await UserService.search_users(db, username=username, email=email, role=role, account_status=account_status, 
+                                           registration_date_from=registration_date_from, registration_date_to=registration_date_to,
+                                           skip=skip, limit=limit)
 
     if not users:
         raise HTTPException(status_code=404, detail="No users found with the provided criteria.")

@@ -12,6 +12,7 @@ from app.schemas.user_schemas import UserCreate, UserUpdate, UserResponse
 from app.utils.nickname_gen import generate_nickname
 from app.utils.security import generate_verification_token, hash_password, verify_password
 from uuid import UUID
+from app.schemas.user_schemas import UserResponse
 from app.services.email_service import EmailService
 from app.models.user_model import UserRole
 import logging
@@ -199,8 +200,9 @@ class UserService:
         return False
 
     @classmethod
-    async def search_users(cls, session: AsyncSession, username: Optional[str] = None, email: Optional[str] = None, role: Optional[str] = None, account_status: Optional[str] = None, registration_date_from: Optional[datetime] = None, registration_date_to: Optional[datetime] = None, skip: int = 0, limit: int = 10) -> List[User]:
-        query = select(User)
+    async def search_users(cls, session: AsyncSession, username: Optional[str] = None, email: Optional[str] = None, 
+                           role: Optional[str] = None, account_status: Optional[str] = None, registration_date_from: Optional[datetime] = None, 
+                           registration_date_to: Optional[datetime] = None, skip: int = 0, limit: int = 10) -> List[User]:
         
         if username:
             query = query.filter(func.lower(User.nickname) == func.lower(username))
@@ -221,6 +223,7 @@ class UserService:
         query = query.offset(skip).limit(limit)
         
         result = await cls._execute_query(session, query)
+        
         users = result.scalars().all() if result else []
         
         # Prepare user responses with registration date and account status

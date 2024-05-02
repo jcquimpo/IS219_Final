@@ -54,12 +54,18 @@ class UserUpdate(UserBase):
             raise ValueError("At least one field must be provided for update")
         return values
 
-class UserResponse(UserBase):
+class UserResponse(BaseModel):
     id: uuid.UUID = Field(..., example=uuid.uuid4())
     email: EmailStr = Field(..., example="john.doe@example.com")
     nickname: Optional[str] = Field(None, min_length=3, pattern=r'^[\w-]+$', example=generate_nickname())    
     is_professional: Optional[bool] = Field(default=False, example=True)
     role: UserRole
+    
+    registration_date: Optional[datetime] = None  # Make registration date optional and set default to None
+    account_status: Optional[str] = None  # Make account status optional and set default to None
+
+    class Config:
+        from_attributes = True
 
 class LoginRequest(BaseModel):
     email: str = Field(..., example="john.doe@example.com")
