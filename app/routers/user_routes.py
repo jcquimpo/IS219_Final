@@ -1,7 +1,27 @@
+"""
+This Python file is part of a FastAPI application, demonstrating user management functionalities including creating, reading,
+updating, and deleting (CRUD) user information. It uses OAuth2 with Password Flow for security, ensuring that only authenticated
+users can perform certain operations. Additionally, the file showcases the integration of FastAPI with SQLAlchemy for asynchronous
+database operations, enhancing performance by non-blocking database calls.
+
+The implementation emphasizes RESTful API principles, with endpoints for each CRUD operation and the use of HTTP status codes
+and exceptions to communicate the outcome of operations. It introduces the concept of HATEOAS (Hypermedia as the Engine of
+Application State) by including navigational links in API responses, allowing clients to discover other related operations dynamically.
+
+OAuth2PasswordBearer is employed to extract the token from the Authorization header and verify the user's identity, providing a layer
+of security to the operations that manipulate user data.
+
+Key Highlights:
+- Use of FastAPI's Dependency Injection system to manage database sessions and user authentication.
+- Demonstrates how to perform CRUD operations in an asynchronous manner using SQLAlchemy with FastAPI.
+- Implements HATEOAS by generating dynamic links for user-related actions, enhancing API discoverability.
+- Utilizes OAuth2PasswordBearer for securing API endpoints, requiring valid access tokens for operations.
+"""
+
 from builtins import dict, int, len, str
 from datetime import timedelta
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Response, status, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db, get_email_service, require_role
@@ -13,13 +33,23 @@ from app.services.jwt_service import create_access_token
 from app.utils.link_generation import create_user_links, generate_pagination_links
 from app.dependencies import get_settings
 from app.services.email_service import EmailService
-from typing import Optional
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 settings = get_settings()
 @router.get("/users/{user_id}", response_model=UserResponse, name="get_user", tags=["User Management Requires (Admin or Manager Roles)"])
 async def get_user(user_id: UUID, request: Request, db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme), current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))):
-    
+    """
+    Endpoint to fetch a user by their unique identifier (UUID).
+
+    Utilizes the UserService to query the database asynchronously for the user and constructs a response
+    model that includes the user's details along with HATEOAS links for possible next actions.
+
+    Args:
+        user_id: UUID of the user to fetch.
+        request: The request object, used to generate full URLs in the response.
+        db: Dependency that provides an AsyncSession for database access.
+        token: The OAuth2 access token obtained through OAuth2PasswordBearer dependency.
+    """
     user = await UserService.get_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -41,12 +71,6 @@ async def get_user(user_id: UUID, request: Request, db: AsyncSession = Depends(g
         links=create_user_links(user.id, request)  
     )
 
-# Additional endpoints for update, delete, create, and list users follow a similar pattern, using
-# asynchronous database operations, handling security with OAuth2PasswordBearer, and enhancing response
-# models with dynamic HATEOAS links.
-
-# This approach not only ensures that the API is secure and efficient but also promotes a better client
-# experience by adhering to REST principles and providing self-discoverable operations.
 
 @router.put("/users/{user_id}", response_model=UserResponse, name="update_user", tags=["User Management Requires (Admin or Manager Roles)"])
 async def update_user(user_id: UUID, user_update: UserUpdate, request: Request, db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme), current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))):
@@ -78,6 +102,40 @@ async def update_user(user_id: UUID, user_update: UserUpdate, request: Request, 
         links=create_user_links(updated_user.id, request)
     )
 
+@router.put("/users/profile/update", response_model=UserResponse, tags=["User Profile"])
+async def update_user_profile(user_update: UserUpdate, request: Request, db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)):
+    """
+    Update user profile information.
+
+    Args:
+        user_update (UserUpdate): JSON payload containing updated user profile fields.
+        request (Request): The request object, used to generate full URLs in the response.
+        db (AsyncSession): Dependency that provides an AsyncSession for database access.
+        token (str): The OAuth2 access token obtained through OAuth2PasswordBearer dependency.
+    """
+    # Extract the user ID from the token or current user context, depending on your implementation.
+    user_id = ...  # Retrieve user ID from token or context
+
+    # Update the user profile in the database using the UserService.
+    updated_user = await UserService.update_profile(db, user_id, user_update)
+
+    # Construct the response model with updated user information and links.
+    return UserResponse.model_construct(
+        id=updated_user.id,
+        bio=updated_user.bio,
+        first_name=updated_user.first_name,
+        last_name=updated_user.last_name,
+        nickname=updated_user.nickname,
+        email=updated_user.email,
+        role=updated_user.role,
+        last_login_at=updated_user.last_login_at,
+        profile_picture_url=updated_user.profile_picture_url,
+        github_profile_url=updated_user.github_profile_url,
+        linkedin_profile_url=updated_user.linkedin_profile_url,
+        created_at=updated_user.created_at,
+        updated_at=updated_user.updated_at,
+        links=create_user_links(updated_user.id, request)
+    )
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT, name="delete_user", tags=["User Management Requires (Admin or Manager Roles)"])
 async def delete_user(user_id: UUID, db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme), current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))):
@@ -215,38 +273,3 @@ async def verify_email(user_id: UUID, token: str, db: AsyncSession = Depends(get
     if await UserService.verify_email_with_token(db, user_id, token):
         return {"message": "Email verified successfully"}
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token")
-
-#FEATURES:
-@router.get("/users/search/", response_model=UserListResponse, tags=["User Management Requires (Admin or Manager Roles)"])
-async def search_users(
-    request: Request,
-    username: Optional[str] = Query(None, description="Username to search for"),
-    email: Optional[str] = Query(None, description="Email to search for"),
-    role: Optional[str] = Query(None, description="Role to search for"),
-    skip: int = Query(0, description="Number of records to skip"),
-    limit: int = Query(10, description="Maximum number of records to return"),
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_role(["ADMIN"]))
-):
-    total_users = await UserService.count(db)
-
-    # Filter users based on query parameters
-    users = await UserService.search_users(db, username=username, email=email, role=role, skip=skip, limit=limit)
-
-    if not users:
-        raise HTTPException(status_code=404, detail="No users found with the provided criteria.")
-
-    user_responses = [
-        UserResponse.model_validate(user) for user in users
-    ]
-
-    pagination_links = generate_pagination_links(request, skip, limit, total_users)
-
-    # Construct the final response with pagination details
-    return UserListResponse(
-        items=user_responses,
-        total=total_users,
-        page=skip // limit + 1,
-        size=len(user_responses),
-        links=pagination_links
-    )
